@@ -8,7 +8,7 @@
  */
 
 import type { Context, Hono } from 'hono'
-import { authenticatedRoomRequest, resolveAppRole, verifyJwt } from 'deepspace/worker'
+import { authenticatedRoomRequest, resolveAppMembership, resolveAppRole, verifyJwt } from 'deepspace/worker'
 import type { JwtVerifierConfig, VerifyResult } from 'deepspace/worker'
 import type { AppContext, Env } from '../../worker.js'
 
@@ -150,10 +150,18 @@ export function registerRealtimeRoutes(app: Hono<AppContext>): void {
     ),
   )
 
-  app.get(
-    '/ws/presence/:scopeId',
-    wsRoute((env) => env.PRESENCE_ROOMS),
-  )
+  app.get('/ws/presence/:scopeId', async (c) => {
+    const scope = c.req.param('scopeId')
+    if (scope !== `app:${c.env.DEEPSPACE_APP_ID}:access-review`) return c.text('Not found', 404)
+    const token = new URL(c.req.url).searchParams.get('token')
+    const auth = token ? (await verifyJwt(jwtConfig(c.env), token)).result : null
+    if (!auth) return c.text('Unauthorized', 401)
+    const membership = await resolveAppMembership(c.env, auth.userId)
+    if (!membership) return c.text('Could not verify membership', 503)
+    if (!membership.member) return c.text('Forbidden', 403)
+    const stub = c.env.PRESENCE_ROOMS.get(c.env.PRESENCE_ROOMS.idFromName(scope))
+    return stub.fetch(authenticatedRoomRequest(c.req.raw, auth))
+  })
 
   app.get(
     '/ws/cron/:roomId',

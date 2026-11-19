@@ -6,11 +6,9 @@
  * - 'developer': The app owner pays (default).
  * - 'user': The calling user pays.
  *
- * Every integration requires a signed-in caller. Set `anonymous: true` on a
- * 'developer' integration to let signed-out visitors call it too — the owner
- * then pays for anyone who can reach the app.
- *
- * Integrations not listed here default to 'developer' with sign-in required.
+ * Developer-billed integrations run through server actions. The generic
+ * browser route permits signed-in callers to reach user-billed integrations.
+ * Integrations not listed here default to 'developer'.
  *
  * IMPORTANT: any integration backed by per-user connected accounts (Google,
  * Composio) must be 'user' — the api-worker resolves the account from the
@@ -22,9 +20,9 @@
 
 export const integrations: Record<
   string,
-  { billing: 'developer' | 'user'; anonymous?: boolean }
+  { billing: 'developer' | 'user' }
 > = {
   google: { billing: 'user' },
   composio: { billing: 'user' },
-  // openai: { billing: 'developer', anonymous: true },
+  exa: { billing: 'developer' },
 }

@@ -57,6 +57,25 @@ test.describe('Smoke tests', () => {
     await expect(page.getByTestId('app-navigation')).toBeVisible({ timeout: 15000 })
   })
 
+  test('guest can simulate all three scenarios and carries the selection into sign-in', async ({ page }) => {
+    await page.goto('/')
+    const inspector = page.getByRole('complementary', { name: 'Blast radius' })
+    await page.getByRole('button', { name: 'Shadow Path', exact: true }).click()
+    await expect(inspector.getByText(/Dana Patel → Ops-OnCall → Legacy-VPN-Admins/).first()).toBeVisible()
+    const destination = new URL(
+      (await page.getByRole('link', { name: 'Sign in to Propose & Collaborate' }).getAttribute('href'))!,
+      page.url(),
+    )
+    expect(destination.searchParams.getAll('edge')).toEqual(['contractors:ASSUMES:db-admin'])
+    await page.getByRole('button', { name: 'CI Bot Outage', exact: true }).click()
+    await expect(inspector.getByRole('alert')).toContainText('1 service accounts lose access')
+    await page.getByRole('button', { name: 'Downgrade', exact: true }).click()
+    await expect(inspector.getByText('ADMIN → READ').first()).toBeVisible()
+    await page.getByRole('link', { name: 'Sign in to Propose & Collaborate' }).click()
+    await expect(page).toHaveURL(/\/home\?edge=alex%3AMEMBER_OF%3Aplatform-sre/)
+    await expect(page.getByRole('heading', { name: 'Sign in to continue' })).toBeVisible()
+  })
+
   test('sign-in button visible when logged out', async ({ page }) => {
     await page.goto('/home')
     await expect(page.getByTestId('nav-sign-in-button')).toBeVisible({ timeout: 15000 })

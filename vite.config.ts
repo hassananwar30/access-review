@@ -8,8 +8,9 @@ import { deepspaceBuild } from 'deepspace/build'
 import { prerender } from './prerender.ts'
 
 const appDir = fileURLToPath(new URL('.', import.meta.url))
+const testConfig = process.env.ACCESS_REVIEW_PLAYWRIGHT_CONFIG
 
-export default defineConfig({
+export default defineConfig(({ command, mode }) => ({
   plugins: [
     react(),
     generouted(),
@@ -20,6 +21,9 @@ export default defineConfig({
     // the generated app and keep local dev/test startup deterministic.
     cloudflare({
       inspectorPort: false,
+      ...(command === 'serve' && mode === 'test' && testConfig
+        ? { configPath: testConfig, persistState: false }
+        : {}),
     }),
     // The app id `define`, the preview-secret cleanup, and the client dedupe
     // hint — all shipped by the SDK so a fix to any of them arrives with a
@@ -64,4 +68,4 @@ export default defineConfig({
     // Dev-only; `vite build` ignores optimizeDeps.
     entries: ['./index.html', './src/pages/**/*.tsx'],
   },
-})
+}))

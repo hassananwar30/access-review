@@ -36,10 +36,20 @@ import {
 } from 'deepspace/worker'
 import type { ActionResult, ActionTools, VerifyResult } from 'deepspace/worker'
 import { actions } from '../actions/index.js'
+import { reviewActions, type ReviewAction } from '../actions/reviews.js'
 import { integrations } from '../integrations.js'
 import type { AppContext, Env } from '../../worker.js'
 
 type ResolveAuth = (req: Request, env: Env) => Promise<VerifyResult | null>
+
+export function dispatchReviewAction(env: Env, name: ReviewAction, actorId: string, params: unknown) {
+  const stub = env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(`app:${env.DEEPSPACE_APP_ID}`))
+  return stub.fetch('https://internal/internal/access-review', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, actorId, params }),
+  })
+}
 
 export function registerActionRoutes(app: Hono<AppContext>, resolveAuth: ResolveAuth): void {
   app.post('/api/actions/:name', async (c) => {
@@ -61,24 +71,27 @@ export function registerActionRoutes(app: Hono<AppContext>, resolveAuth: Resolve
     // Own keys only: `actions[name]` also finds `constructor` (Object), which
     // returns the handler argument, env secrets included, as the response.
     const action = lookupOwn(actions, name)
+    const review = reviewActions.find(reviewName => reviewName === name)
+    if (!action && !review) return c.json({ error: 'Action not found' }, 404)
+    const params = await c.req.json<Record<string, unknown>>().catch(() => null)
+    if (!params || typeof params !== 'object' || Array.isArray(params)) {
+      return c.json({ success: false, error: 'Expected a JSON object.' }, 400)
+    }
+    if (review) return dispatchReviewAction(c.env, review, auth.userId, params)
     if (!action) return c.json({ error: 'Action not found' }, 404)
-    const params = await c.req.json<Record<string, unknown>>()
     const tools = createActionTools(c.env, auth.userId, callerJwt)
     const result = await action({ userId: auth.userId, params, tools, env: c.env, callerJwt })
-    return c.json(result as unknown as Record<string, unknown>)
+    return Response.json(result, { status: result.success ? 200 : result.status ?? 400 })
   })
 }
 
-function createActionTools(env: Env, userId: string, callerJwt: string): ActionTools {
-  const stub = env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(`app:${env.DEEPSPACE_APP_ID}`))
-
-  // The DO returns ActionResult<unknown>; callers below supply the precise
-  // operation result type fixed by the SDK tools-api wire contract.
-  async function execTool<TData>(
-    tool: string,
-    params: Record<string, unknown>,
-  ): Promise<ActionResult<TData>> {
-    const res = await stub.fetch(
+export async function executeRecordTool<TData>(
+  fetchRoom: (request: Request) => Promise<Response>,
+  userId: string,
+  tool: string,
+  params: Record<string, unknown>,
+): Promise<ActionResult<TData>> {
+    const res = await fetchRoom(
       new Request('https://internal/api/tools/execute', {
         method: 'POST',
         headers: {
@@ -90,6 +103,12 @@ function createActionTools(env: Env, userId: string, callerJwt: string): ActionT
       }),
     )
     return res.json() as Promise<ActionResult<TData>>
+}
+
+function createActionTools(env: Env, userId: string, callerJwt: string): ActionTools {
+  const stub = env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(`app:${env.DEEPSPACE_APP_ID}`))
+  function execTool<TData>(tool: string, params: Record<string, unknown>): Promise<ActionResult<TData>> {
+    return executeRecordTool(req => stub.fetch(req), userId, tool, params)
   }
 
   async function callIntegration<T>(endpoint: string, data?: unknown): Promise<ActionResult<T>> {

@@ -22,6 +22,9 @@ export default defineConfig({
   testMatch: '**/*.spec.ts',
   timeout: 30_000,
   retries: 0,
+  // Specs reuse the same accounts and room. Parallel specs would join and
+  // leave presence as the very identities the collaboration test observes.
+  workers: 1,
   use: {
     baseURL: BASE_URL,
     headless: true,
@@ -31,7 +34,7 @@ export default defineConfig({
     // Bind the local test server directly. A bare `--host` asks Vite to
     // enumerate every interface, which fails in restricted containers before
     // the app can start (`uv_interface_addresses`).
-    command: `npx vite --port ${PORT} --strictPort --host 127.0.0.1`,
+    command: `node tests/serve.ts ${PORT}`,
     cwd: '..',
     // Readiness gates on the auth plane, not just vite: /api/auth/ok only
     // answers once workerd behind /api/* has booted, so no test starts

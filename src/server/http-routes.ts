@@ -240,11 +240,12 @@ export function registerAuthAndIntegrationRoutes(app: Hono<AppContext>): void {
     const config = lookupOwn(integrations, integrationName)
     const billingMode = config?.billing ?? 'developer'
 
-    // Sign-in is required unless the app opts this integration into anonymous
-    // use; developer billing would otherwise let any visitor spend the owner's
-    // credits. User billing always needs a caller to bill.
+    if (billingMode === 'developer') {
+      return c.json({ error: 'Developer-billed integrations require a server action.' }, 403)
+    }
+
     const auth = await resolveAuth(c.req.raw, c.env)
-    if (!auth && (billingMode === 'user' || !config?.anonymous)) {
+    if (!auth) {
       return c.json({ error: 'Sign in required for this integration' }, 401)
     }
 
@@ -252,14 +253,8 @@ export function registerAuthAndIntegrationRoutes(app: Hono<AppContext>): void {
       'Content-Type': c.req.header('Content-Type') ?? 'application/json',
     }
 
-    // The api-worker bills the JWT subject: developer mode uses the app owner;
-    // user mode forwards the caller. There is no client billing override.
-    if (billingMode === 'developer') {
-      headers['Authorization'] = `Bearer ${c.env.APP_OWNER_JWT}`
-    } else {
-      const token = c.req.header('Authorization')?.slice(7)
-      if (token) headers['Authorization'] = `Bearer ${token}`
-    }
+    const token = c.req.header('Authorization')?.slice(7)
+    if (token) headers['Authorization'] = `Bearer ${token}`
 
     // Identify this app for per-app integrations. Pre-first-deploy there is no
     // token, so omit both headers and let the api-worker fail closed.

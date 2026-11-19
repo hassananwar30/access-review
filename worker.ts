@@ -12,6 +12,7 @@ import {
   CanvasRoom,
   CronRoom,
   JobRoom,
+  isAnonymousUserId,
   PresenceRoom,
   RecordRoom,
   resolveAppRole,
@@ -25,7 +26,8 @@ import { buildTools } from './src/ai/tools.js'
 import { tasks as cronTasks, runTask as runCronTask } from './src/cron.js'
 import { runJob } from './src/jobs.js'
 import { schemas } from './src/schemas.js'
-import { registerActionRoutes } from './src/server/action-routes.js'
+import { runReviewAction, type ReviewAction } from './src/actions/reviews.js'
+import { executeRecordTool, registerActionRoutes } from './src/server/action-routes.js'
 import {
   registerAuthAndIntegrationRoutes,
   registerPlatformProxyRoutes,
@@ -47,6 +49,26 @@ export const __DO_MANIFEST__ = [
 export class AppRecordRoom extends RecordRoom<Env> {
   constructor(state: DurableObjectState, env: Env) {
     super(state, env, schemas, { ownerUserId: env.OWNER_USER_ID })
+  }
+
+  override async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url)
+    if (url.hostname !== 'internal' || url.pathname !== '/internal/access-review' || request.method !== 'POST') {
+      return super.fetch(request)
+    }
+    const { name, actorId, params } = await request.json<{ name: ReviewAction; actorId: string; params: unknown }>()
+    return this.state.blockConcurrencyWhile(async () => {
+      try {
+        return await runReviewAction(
+          name, actorId, params, this.env.OWNER_USER_ID,
+          (userId, tool, input) => executeRecordTool(req => super.fetch(req), userId, tool, input),
+          this.state.storage,
+        )
+      } catch (error) {
+        console.error('Access review action failed', error)
+        return Response.json({ success: false, error: 'The review could not finish. Retry the action.' }, { status: 503 })
+      }
+    })
   }
 }
 
@@ -141,6 +163,7 @@ registerActionRoutes(app, resolveAuth)
 // Only copilot owns the collections needed for the in-app chat UI.
 registerAgent(app, {
   tools: buildTools,
+  authorize: ({ userId }) => !isAnonymousUserId(userId),
   inApp: schemas.some((schema) => schema.name === AI_CHATS_SCHEMA.name),
 })
 registerPlatformProxyRoutes(app)
