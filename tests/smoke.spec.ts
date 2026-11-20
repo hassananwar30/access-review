@@ -37,19 +37,42 @@ test.describe('Smoke tests', () => {
     expect(await page.locator('head link[rel="canonical"]').count()).toBe(1)
   })
 
-  test('static contract: landing fires no auth request, opens no websocket', async ({ page }) => {
-    const offenders: string[] = []
-    page.on('request', (req) => {
-      if (req.url().includes('/api/auth/')) offenders.push(req.url())
+  for (const path of ['/', '/guide']) {
+    test(`static contract: ${path} opens no auth or data connection`, async ({ page }) => {
+      const offenders: string[] = []
+      page.on('request', (req) => {
+        if (new URL(req.url()).pathname.startsWith('/api/auth/')) offenders.push('/api/auth/')
+      })
+      // Only the DO room route counts. Vite's HMR socket is a dev artifact.
+      page.on('websocket', (ws) => {
+        const { pathname } = new URL(ws.url())
+        if (pathname.startsWith('/ws/')) offenders.push(`ws: ${pathname}`)
+      })
+      await page.goto(path)
+      await expect(page.getByRole('heading', {
+        name: path === '/' ? 'Preview a permission change' : 'How Access Review works',
+      })).toBeVisible()
+      await page.waitForTimeout(1500)
+      expect(offenders).toEqual([])
     })
-    // Only the DO room route counts — vite's own HMR socket is a dev artifact.
-    page.on('websocket', (ws) => {
-      if (new URL(ws.url()).pathname.startsWith('/ws/')) offenders.push(`ws: ${ws.url()}`)
-    })
+  }
+
+  test('guide links the public simulator and workspace', async ({ page }) => {
+    const errors = captureConsoleErrors(page)
     await page.goto('/')
-    await expect(page.getByTestId('static-landing')).toBeVisible()
-    await page.waitForTimeout(1500)
-    expect(offenders).toEqual([])
+    await page.getByRole('link', { name: 'How it works' }).click()
+    await expect(page).toHaveURL(/\/guide$/)
+    await expect(page.getByRole('heading', { level: 2 })).toHaveText([
+      'Entity & Permission Flow', 'Selected for Removal & Blast Radius', 'The 3 Preset Scenarios', 'Governance Workflow',
+    ])
+    const demoLinks = page.getByRole('link', { name: 'Launch Interactive Demo' })
+    await expect(demoLinks).toHaveCount(2)
+    for (const link of await demoLinks.all()) await expect(link).toHaveAttribute('href', '/')
+    expect(errors).toEqual([])
+    await page.getByRole('link', { name: 'Open Full Workspace' }).first().click()
+    await expect(page).toHaveURL(/\/home$/)
+    await page.getByTestId('app-navigation').getByRole('link', { name: 'How it works' }).click()
+    await expect(page.getByRole('heading', { name: 'How Access Review works' })).toBeVisible()
   })
 
   test('dynamic app boundary mounts on /home', async ({ page }) => {

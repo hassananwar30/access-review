@@ -16,7 +16,10 @@ export default function Landing() {
         <div className="review-shell">
           <header className="review-mast">
             <span className="review-brand"><ShieldCheck size={22} /> Access Review</span>
-            <Link to={workspace} className="review-button review-primary">Sign in to Propose &amp; Collaborate <ArrowRight size={15} /></Link>
+            <div className="flex flex-wrap gap-2">
+              <Link to="/guide" className="review-button">How it works</Link>
+              <Link to={workspace} className="review-button review-primary">Sign in to Propose &amp; Collaborate <ArrowRight size={15} /></Link>
+            </div>
           </header>
           <div className="review-hero">
             <h1>Preview a permission change</h1>

@@ -1,0 +1,21 @@
+.guide-shell { max-width: 1080px; }
+.guide-hero .review-brand { width: fit-content; margin-bottom: 18px; }
+.guide-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.guide-actions .review-button { padding: 8px 13px; }
+.guide-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.guide-section { padding: clamp(16px, 2.2vw, 26px); }
+.guide-section h2 { display: flex; align-items: center; gap: 9px; font-size: 1.14rem; font-weight: 650; margin-bottom: 12px; }
+.guide-section h2 svg { width: 18px; height: 18px; flex-shrink: 0; color: var(--cyan); }
+.guide-section p, .guide-section dd, .guide-steps { color: var(--muted); font-size: .9rem; line-height: 1.55; }
+.guide-section dl { display: grid; gap: 4px; }
+.guide-section p + dl { margin-top: 12px; }
+.guide-section dt { color: var(--ink); font-size: .88rem; font-weight: 650; }
+.guide-section dd + dt { margin-top: 6px; }
+.guide-section code { display: inline; overflow-wrap: anywhere; color: var(--cyan); font-size: .84em; }
+.guide-flow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.guide-flow li { padding: 3px 8px; border: 1px solid var(--line); border-radius: 5px; font-size: .77rem; background: #172539; }
+.guide-steps { list-style: decimal; padding-left: 1.3em; margin-bottom: 12px; }
+.guide-steps li + li { margin-top: 5px; }
+.guide-section strong { color: var(--ink); }
+.guide-footer { margin-top: 16px; }
+@media (max-width: 740px) { .guide-grid { grid-template-columns: minmax(0, 1fr); } }

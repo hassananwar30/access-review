@@ -79,6 +79,10 @@ export default function Navigation() {
 
           <div className="flex-1" />
 
+          {location.pathname === '/home' && (
+            <Link to="/guide" className="whitespace-nowrap text-sm text-muted-foreground hover:text-foreground">How it works</Link>
+          )}
+
           {!isLoaded ? null : isSignedIn && !profileReady ? (
             /* Signed in, profile still loading — skeleton pill, never the
                Sign in button (that would offer sign-in to a signed-in user). */
