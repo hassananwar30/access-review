@@ -15,8 +15,8 @@ export const accessReviewSchemas: CollectionSchema[] = [
     uniqueOn: ['nodeKey'],
     columns: [
       text('nodeKey'), text('name'), select('nodeType', 'User', 'ServiceAccount', 'Group', 'Role', 'Resource'),
-      text('department'), { ...select('sensitivity', 'low', 'medium', 'high', 'critical'), required: false },
-      text('description'),
+      { ...text('department', false), default: '' }, { ...select('sensitivity', 'low', 'medium', 'high', 'critical'), required: false },
+      { ...text('description', false), default: '' },
     ],
     permissions: privateReads,
   },
@@ -26,7 +26,7 @@ export const accessReviewSchemas: CollectionSchema[] = [
     columns: [
       text('edgeKey'), text('sourceKey'), text('targetKey'),
       select('relation', 'MEMBER_OF', 'ASSUMES', 'GRANTS_READ', 'GRANTS_WRITE', 'GRANTS_ADMIN'),
-      text('justification', false),
+      text('label', false), text('justification', false),
       { name: 'isActive', storage: 'number', interpretation: 'boolean', required: true, default: true },
     ],
     permissions: privateReads,
@@ -57,7 +57,7 @@ export const accessReviewSchemas: CollectionSchema[] = [
   {
     name: 'audit_logs',
     columns: [
-      select('action', 'EDGE_REVOKED', 'PROPOSAL_REJECTED', 'ORG_RESET', 'SNAPSHOT_IMPORTED'),
+      select('action', 'EDGE_REVOKED', 'PROPOSAL_REJECTED', 'ORG_RESET', 'SNAPSHOT_IMPORTED', 'ORG_IMPORTED'),
       text('actorId'), text('actorRole'), text('proposalId', false),
       text('targetEdgeIdsJson'), text('blastSummaryJson'), text('timestamp'),
     ],

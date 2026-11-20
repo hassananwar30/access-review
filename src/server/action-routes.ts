@@ -30,14 +30,17 @@
 import type { Hono } from 'hono'
 import {
   apiWorkerFetch,
+  BodyTooLargeError,
   lookupOwn,
   normalizeApiError,
+  readBoundedBodyText,
   splitIntegrationEndpoint,
 } from 'deepspace/worker'
 import type { ActionResult, ActionTools, VerifyResult } from 'deepspace/worker'
 import { actions } from '../actions/index.js'
 import { reviewActions, type ReviewAction } from '../actions/reviews.js'
 import { integrations } from '../integrations.js'
+import { maxOrgGraphBytes } from '../lib/reviewGraph.js'
 import type { AppContext, Env } from '../../worker.js'
 
 type ResolveAuth = (req: Request, env: Env) => Promise<VerifyResult | null>
@@ -73,14 +76,22 @@ export function registerActionRoutes(app: Hono<AppContext>, resolveAuth: Resolve
     const action = lookupOwn(actions, name)
     const review = reviewActions.find(reviewName => reviewName === name)
     if (!action && !review) return c.json({ error: 'Action not found' }, 404)
-    const params = await c.req.json<Record<string, unknown>>().catch(() => null)
+    let params: unknown
+    try {
+      params = review === 'importOrgGraph'
+        ? JSON.parse(await readBoundedBodyText(c.req.raw, maxOrgGraphBytes))
+        : await c.req.json()
+    } catch (error) {
+      if (error instanceof BodyTooLargeError) return c.json({ success: false, error: 'Graph JSON must be under 4 MiB.' }, 413)
+      return c.json({ success: false, error: 'Enter valid JSON.' }, 400)
+    }
     if (!params || typeof params !== 'object' || Array.isArray(params)) {
       return c.json({ success: false, error: 'Expected a JSON object.' }, 400)
     }
     if (review) return dispatchReviewAction(c.env, review, auth.userId, params)
     if (!action) return c.json({ error: 'Action not found' }, 404)
     const tools = createActionTools(c.env, auth.userId, callerJwt)
-    const result = await action({ userId: auth.userId, params, tools, env: c.env, callerJwt })
+    const result = await action({ userId: auth.userId, params: params as Record<string, unknown>, tools, env: c.env, callerJwt })
     return Response.json(result, { status: result.success ? 200 : result.status ?? 400 })
   })
 }

@@ -16,6 +16,7 @@ import {
   PresenceRoom,
   RecordRoom,
   resolveAppRole,
+  serverBuild,
   workerErrorHandler,
   YjsRoom,
 } from 'deepspace/worker'
@@ -63,6 +64,8 @@ export class AppRecordRoom extends RecordRoom<Env> {
           name, actorId, params, this.env.OWNER_USER_ID,
           (userId, tool, input) => executeRecordTool(req => super.fetch(req), userId, tool, input),
           this.state.storage,
+          // Refresh from the final topology after a multi-record replacement.
+          () => this.broadcast(serverBuild.resubscribe()),
         )
       } catch (error) {
         console.error('Access review action failed', error)

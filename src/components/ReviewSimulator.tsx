@@ -73,14 +73,14 @@ export function ReviewSimulator({ nodes, edges, selected, onSelection, footer, g
               const label = `${name(edge.sourceId)} → ${name(edge.targetId)}`
               return <g key={edge.id} className={`review-edge ${cls}`} role="button" tabIndex={0} aria-pressed={active} aria-label={label}
                 onClick={() => toggle(edge.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(edge.id) } }}>
-                <title>{label} · {edge.relation}</title><path className="review-edge-ink" d={d} /><path className="review-edge-hit" d={d} />
+                <title>{label} · {edge.label ?? edge.relation}</title><path className="review-edge-ink" d={d} /><path className="review-edge-hit" d={d} />
               </g>
             })}
             {[...positions].map(([id, pos]) => <g key={id} className={`review-node ${pos.node.type === 'ServiceAccount' ? 'bot' : ''}`}>
               <rect x={pos.x} y={pos.y} width={178} height={30} rx={5} />
               <circle cx={pos.x + 11} cy={pos.y + 15} r={3} />
-              <text x={pos.x + 21} y={pos.y + 19}>{pos.node.name}</text>
-              <title>{pos.node.description}</title>
+              <text x={pos.x + 21} y={pos.y + 19}>{pos.node.name.length > 21 ? pos.node.name.slice(0, 20) + '…' : pos.node.name}</text>
+              <title>{pos.node.name}{pos.node.description ? ` · ${pos.node.description}` : ''}</title>
             </g>)}
           </svg>
         </div>

@@ -32,7 +32,7 @@
 .review-button:disabled { opacity: .48; cursor: default; }
 .review-primary { color: #06211f; background: var(--cyan); border-color: var(--cyan); }
 .review-primary:hover { color: #06211f; background: #a1fff4; }
-.review-canvas { overflow: auto; background: radial-gradient(#30465d 1px, transparent 1px) 0 0/15px 15px, #0c1522; border-block: 1px solid var(--line); }
+.review-canvas { overflow: auto; max-height: 570px; background: radial-gradient(#30465d 1px, transparent 1px) 0 0/15px 15px, #0c1522; border-block: 1px solid var(--line); }
 .review-canvas svg { width: 100%; display: block; }
 .review-legend { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 16px 9px; font-size: .72rem; }
 .review-legend .cut { color: var(--red); }

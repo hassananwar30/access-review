@@ -64,6 +64,7 @@ function accessForPrincipal(
   graph: ReturnType<typeof indexGraph>,
   principal: GraphNode,
   resourceId?: string,
+  visitEdge?: () => void,
 ): EffectiveAccess[] {
   const byResource = new Map<string, EffectiveAccess>()
   const nodeIds = [principal.id]
@@ -81,6 +82,7 @@ function accessForPrincipal(
       continue
     }
     const edge = next.value
+    visitEdge?.()
     if (visited.has(edge.targetId)) continue
     const target = graph.byId.get(edge.targetId)!
     if (edge.relation === 'MEMBER_OF' || edge.relation === 'ASSUMES') {
@@ -110,6 +112,24 @@ export function computeEffectiveAccess(nodes: readonly GraphNode[], edges: reado
   const graph = indexGraph(nodes, edges)
   const principals = nodes.filter(isPrincipal).sort((a, b) => compareIds(a.id, b.id))
   return principals.flatMap(principal => accessForPrincipal(graph, principal))
+}
+
+/** Simple-path enumeration can be exponential even on a small cyclic graph. */
+export function canEnumerateGraph(nodes: readonly GraphNode[], edges: readonly GraphEdge[]): boolean {
+  const graph = indexGraph(nodes, edges)
+  const limitReached = new Error('Graph traversal limit')
+  let remaining = 25_000
+  try {
+    for (const principal of nodes.filter(isPrincipal)) {
+      accessForPrincipal(graph, principal, undefined, () => {
+        if (--remaining < 0) throw limitReached
+      })
+    }
+    return true
+  } catch (error) {
+    if (error !== limitReached) throw error
+    return false
+  }
 }
 
 export interface AccessChange {

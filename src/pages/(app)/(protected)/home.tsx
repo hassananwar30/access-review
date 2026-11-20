@@ -1,9 +1,10 @@
-import { Suspense, lazy, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Suspense, lazy, useDeferredValue, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { getAuthToken, useAuthProfileReady, useMutations, usePresenceRoom, useQuery, useUsers } from 'deepspace'
 import { Users } from 'lucide-react'
 import { SCOPE_ID } from '../../../constants'
 import { ReviewSimulator } from '../../../components/ReviewSimulator'
+import { OrgGraphImport } from '../../../components/OrgGraphImport'
 import { graphFromRecords, type EdgeRecord, type NodeRecord } from '../../../lib/reviewGraph'
 import { simulateEdgeRemoval } from '../../../lib/accessGraph'
 
@@ -46,8 +47,17 @@ interface Proposal {
 interface Comment { proposalId: string; authorId: string; body: string }
 interface Audit { action: string; actorId: string; timestamp: string; targetEdgeIdsJson: string; blastSummaryJson: string }
 
+function auditEdgeLabels(audit: Audit) {
+  const { targetEdges } = JSON.parse(audit.blastSummaryJson) as { targetEdges?: { id: string; label: string }[] }
+  const labels = new Map(targetEdges?.map(edge => [edge.id, edge.label]))
+  return (JSON.parse(audit.targetEdgeIdsJson) as string[]).map(id => ({ id, label: labels.get(id) ?? id }))
+}
+
 function summaryText(json: string) {
-  const summary: Partial<ReturnType<typeof simulateEdgeRemoval>['summary']> = JSON.parse(json)
+  const summary: Partial<ReturnType<typeof simulateEdgeRemoval>['summary']> & { nodes?: number; edges?: number; clearedProposals?: number } = JSON.parse(json)
+  if (typeof summary.nodes === 'number' && typeof summary.edges === 'number') {
+    return `${summary.nodes} nodes · ${summary.edges} edges${summary.clearedProposals ? ` · ${summary.clearedProposals} proposals cleared` : ''}`
+  }
   if (summary.principalsImpacted === undefined) return ''
   return `${summary.accessLostCount} lost · ${summary.shadowAccessCount} retained · ${summary.downgradedCount} downgraded`
 }
@@ -147,10 +157,15 @@ export default function ReviewWorkspace() {
   const [tab, setTab] = useState<'proposals' | 'audit'>('proposals')
   const [showProposal, setShowProposal] = useState(false)
   const [showAdvisor, setShowAdvisor] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [chatId, setChatId] = useState<string | null>(null)
   const [feedback, setFeedback] = useState({ message: '', error: false })
   const [busy, setBusy] = useState(false)
-  const graph = useMemo(() => graphFromRecords(nodeRecords, edgeRecords), [nodeRecords, edgeRecords])
+  // A replacement can send hundreds of record changes. Keep the canvas and
+  // path analysis behind the live subscriptions so the browser can apply the batch.
+  const canvasNodes = useDeferredValue(nodeRecords)
+  const canvasEdges = useDeferredValue(edgeRecords)
+  const graph = useMemo(() => graphFromRecords(canvasNodes, canvasEdges), [canvasNodes, canvasEdges])
   const selected = useMemo(() => selection.filter(id => graph.edges.some(edge => edge.id === id)), [selection, graph.edges])
   const selectedMetadata = JSON.stringify(selected.slice(0, 10))
   useEffect(() => { if (connected) updateState({ selection: selectedMetadata }) }, [connected, updateState, selectedMetadata])
@@ -187,17 +202,48 @@ export default function ReviewWorkspace() {
   }
 
   const graphReady = status === 'ready' && edgeStatus === 'ready'
+
+  function exportGraph() {
+    const currentGraph = graphFromRecords(nodeRecords, edgeRecords)
+    const file = new Blob([JSON.stringify(currentGraph, null, 2) + '\n'], { type: 'application/json' })
+    const url = URL.createObjectURL(file)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'access-review-iam-graph.json'
+    link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  async function importGraph(payload: Record<string, unknown>) {
+    const result = await action<{ nodes: number; edges: number }>('importOrgGraph', payload)
+    setSelection([])
+    setShowProposal(false)
+    setShowImport(false)
+    setFeedback({ message: `Imported ${result.nodes} nodes and ${result.edges} edges.`, error: false })
+  }
+
   return <main className="review-page">
     <div className="review-shell">
       <header className="review-mast">
         <Link to="/" className="review-button">Public demo</Link>
         <span className="review-live"><Users size={14} className="inline" /> {connected ? `${peers.length + 1} online` : 'Connecting presence…'}</span>
         <span className="review-muted">{roleLabels[role]}</span>
-        {role === 'admin' && <button type="button" className="review-button" disabled={!ready || busy || !graphReady}
-          onClick={() => void run('resetDemoOrg', {}, 'Kestrel Cloud restored.')}>Reset Demo Org</button>}
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="review-button" disabled={!user || !graphReady || busy} onClick={exportGraph}>Export JSON</button>
+          {role === 'admin' && <>
+            <button type="button" className="review-button" disabled={!ready || busy || !graphReady} onClick={() => setShowImport(true)}>Import JSON</button>
+            <button type="button" className="review-button" disabled={!ready || busy || !graphReady}
+              onClick={async () => {
+                if (await run('resetDemoOrg', {}, 'Kestrel Cloud restored.')) {
+                  setSelection([])
+                  setShowProposal(false)
+                }
+              }}>Reset Demo Org</button>
+          </>}
+        </div>
       </header>
       <div className="review-hero">
-        <h1>Kestrel Cloud access review</h1>
+        <h1>Workspace access review</h1>
         <p>Simulate a permission change, then submit the proposed revocation for approval.</p>
         {peers.map(peer => {
           let ids: unknown = []
@@ -208,7 +254,7 @@ export default function ReviewWorkspace() {
       </div>
       {feedback.message && <p className={feedback.error ? 'review-error' : 'review-live'} role={feedback.error ? 'alert' : 'status'}>{feedback.message}</p>}
       {!graphReady ? <p>{status === 'error' || edgeStatus === 'error' ? 'Could not load the graph.' : 'Loading the workspace…'}</p>
-        : graph.nodes.length === 0 ? <p>{role === 'admin' ? 'Select Reset Demo Org to load Kestrel Cloud.' : 'An admin needs to load the Kestrel Cloud graph.'}</p>
+        : graph.nodes.length === 0 ? <p>{role === 'admin' ? 'Import a custom graph or select Reset Demo Org to load Kestrel Cloud.' : 'An admin needs to load a graph.'}</p>
         : <ReviewSimulator {...graph} selected={selected} onSelection={setSelection}
           guidance={<Guidance key={topic} topic={topic} />}
           footer={<div className="review-footer">
@@ -232,8 +278,8 @@ export default function ReviewWorkspace() {
         ) : (
           audit.length ? audit.map(({ recordId, data }) => <article key={recordId} data-testid="audit-entry" data-record-id={recordId}>
             <strong>{data.action}</strong><p className="review-muted">{data.actorId} · {new Date(data.timestamp).toLocaleString()}</p>
-            <ul className="review-muted">{(JSON.parse(data.targetEdgeIdsJson) as string[]).map(edgeId =>
-              <li key={edgeId}>{edgeLabels.get(edgeId) ?? edgeId}</li>)}</ul>
+            <ul className="review-muted">{auditEdgeLabels(data).map(({ id, label }) =>
+              <li key={id}>{label}</li>)}</ul>
             <p>{summaryText(data.blastSummaryJson)}</p>
           </article>) : <p className="review-muted">No audit entries yet.</p>
         )}
@@ -243,6 +289,8 @@ export default function ReviewWorkspace() {
           <ChatPanel userId={user.id} chatId={chatId} onChatCreated={setChatId} emptyStatePrompts={advisorPrompts} className="h-[460px]" />
         </Suspense>
       </section>}
+      {role === 'admin' && showImport && <OrgGraphImport canSubmit={ready && graphReady && !busy}
+        onClose={() => setShowImport(false)} onImport={importGraph} />}
     </div>
   </main>
 }

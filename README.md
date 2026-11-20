@@ -38,7 +38,12 @@ the shared workspace.
 The demo uses synthetic IAM data. Approvals modify the shared demo graph.
 The public simulator runs entirely in the browser. The deterministic TypeScript
 engine is shared with the Worker and searches minimum cuts up to three edges.
-The release focuses on review and approval. Snapshot import and export are deferred.
+Signed-in users can export the active graph as JSON. Admins can replace the
+shared graph by uploading or pasting JSON with up to 80 nodes and 200 edges.
+Import clears pending proposals for removed or changed relationships. **Reset
+Demo Org** also clears proposals and comments and restores Kestrel Cloud.
+Both actions preserve the audit history. Graphs with too many alternate paths
+for interactive simulation are rejected before any records change.
 
 ## Local checks
 
